@@ -48,7 +48,7 @@ The program takes 8 mandatory arguments:
 
 Our implementation addresses and mitigates several critical concurrency challenges:
 
-* **Deadlock Prevention & Coffman’s Conditions:** Deadlocks are completely eliminated by enforcing a strict resource hierarchy (All-or-Nothing strategy based on dongle IDs, from minimum to maximum). Coders always acquire the lower-ID dongle first, preventing circular wait conditions.
+* **Deadlock Prevention & Coffman’s Conditions:** Deadlocks around the circular table are completely eliminated by enforcing a strict resource acquisition order based on the IDs of each coder's adjacent dongles (always acquiring the lower-ID dongle first between left and right), preventing circular wait conditions.
 * **Starvation Prevention:** Handled via priority queues managed by Min-Heaps, ensuring that coders waiting the longest (FIFO) or with the tightest deadlines (EDF) get fair access to resources.
 * **Cooldown Handling:** Integrated a rigorous timestamp check (`last_released + dongle_cooldown`) during resource acquisition to ensure dongles cannot be instantly re-grabbed.
 * **Precise Burnout Detection:** A dedicated monitor thread continuously checks each coder's last active timestamp against `time_to_burnout`, ensuring exact, non-delayed termination when a burnout occurs.
