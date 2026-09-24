@@ -12,12 +12,14 @@ The core goal of the project is to master multi-threading in C, ensuring that al
 
 ## 🚀 Instructions
 
-### ⚙️ Compilation
-To compile the project, run the provided `Makefile` at the root of the repository:
-```bash
-make
-```
-This will generate the `codexion` executable. Other standard Makefile rules like `clean`, `fclean`, and `re` are also supported.
+### ⚙️ Compilation & Makefile Rules
+
+To compile the project, run the provided `Makefile` at the root of the repository using the rules below depending on your needs:
+
+* **`make` (or `make all`):** Compiles all source files using strict flags (`-Wall -Wextra -Werror -pthread`), generates necessary object files, and links them to produce the final executable `codexion`. It is optimized to prevent unnecessary relinking.
+* **`make clean`:** Removes all temporary object files (`.o`) generated during the compilation process, cleaning up the working directory.
+* **`make fclean`:** Performs a deep cleanup by removing both the temporary object files (`.o`) and the compiled binary executable (`codexion`).
+* **`make re`:** Acts as a shortcut for `fclean` followed immediately by `make`, forcing a complete re-compilation of the entire project from scratch.
 
 ### 🎮 Execution
 The program takes 8 mandatory arguments:
@@ -79,4 +81,5 @@ Concurrency control in Codexion is built using POSIX threads (`pthreads`) and lo
 
 ### 🤖 AI Usage Disclosure
 Artificial Intelligence (AI) tools were utilized during the development of this project as a collaborative programming assistant for:
+* **Understanding New Concepts & Tools:** Exploring advanced multi-threading paradigms, condition variables, and custom scheduling architectures.
 * **Debugging Concurrency Logic:** Analyzing complex race conditions and edge cases (such as single-coder behaviors and deadlock scenarios).
