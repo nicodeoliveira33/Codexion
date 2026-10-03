@@ -1,88 +1,50 @@
 #include "codexion.h"
 
-int	heap_init(t_heap *heap, int capacity)
+t_heap	*init_heap(int capacity)
 {
-	heap->data = malloc(sizeof(t_request) * capacity);
-	if (!heap->data)
-		return (1);
-	heap->size = 0;
-	heap->capacity = capacity;
-	return (0);
-}
+	t_heap	*heap;
 
-void	heap_destroy(t_heap *heap)
-{
-	if (heap->data)
-		free(heap->data);
-	heap->data = NULL;
-	heap->size = 0;
-}
-
-static int	has_higher_priority(t_request a, t_request b, t_sched policy)
-{
-	if (policy == POLICY_FIFO)
+	heap = malloc(sizeof(t_heap));
+	if (!heap)
+		return (NULL);
+	heap->nodes = malloc(sizeof(t_heap_node) * capacity);
+	if (!heap->nodes)
 	{
-		if (a.arrival_time != b.arrival_time)
-			return (a.arrival_time < b.arrival_time);
-		return (a.coder_id < b.coder_id);
+		free(heap);
+		return (NULL);
 	}
-	if (a.deadline != b.deadline)
-		return (a.deadline < b.deadline);
-	return (a.coder_id < b.coder_id);
+	heap->capacity = capacity;
+	heap->size = 0;
+	return (heap);
 }
 
-void	heap_insert(t_heap *heap, t_request req, t_sched policy)
+void	heap_insert(t_heap *heap, t_coder *coder, long key)
 {
-	int			i;
-	int			parent;
-	t_request	tmp;
+	int	i;
 
-	if (heap->size >= heap->capacity)
+	if (!heap || heap->size >= heap->capacity)
 		return ;
 	i = heap->size;
-	heap->data[i] = req;
+	heap->nodes[i].coder = coder;
+	heap->nodes[i].key = key;
+	heap->nodes[i].id_tie = coder->id;
 	heap->size++;
-	while (i > 0)
+	while (i > 0 && should_swap(heap->nodes[(i - 1) / 2], heap->nodes[i]))
 	{
-		parent = (i - 1) / 2;
-		if (has_higher_priority(heap->data[i], heap->data[parent], policy))
-		{
-			tmp = heap->data[i];
-			heap->data[i] = heap->data[parent];
-			heap->data[parent] = tmp;
-			i = parent;
-		}
-		else
-			break ;
+		swap_nodes(&heap->nodes[(i - 1) / 2], &heap->nodes[i]);
+		i = (i - 1) / 2;
 	}
 }
 
-t_request	heap_extract_min(t_heap *heap, t_sched policy)
+t_coder	*heap_extract_min(t_heap *heap)
 {
-	t_request	min_req;
-	int			i;
-	int			smallest;
-	t_request	tmp;
+	t_coder	*min_coder;
 
-	if (heap->size == 0)
-		return ((t_request){0, 0, 0});
-	min_req = heap->data[0];
-	heap->data[0] = heap->data[heap->size - 1];
+	if (!heap || heap->size <= 0)
+		return (NULL);
+	min_coder = heap->nodes[0].coder;
 	heap->size--;
-	i = 0;
-	while (1)
-	{
-		smallest = i;
-		if (2 * i + 1 < heap->size && has_higher_priority(heap->data[2 * i + 1], heap->data[smallest], policy))
-			smallest = 2 * i + 1;
-		if (2 * i + 2 < heap->size && has_higher_priority(heap->data[2 * i + 2], heap->data[smallest], policy))
-			smallest = 2 * i + 2;
-		if (smallest == i)
-			break ;
-		tmp = heap->data[i];
-		heap->data[i] = heap->data[smallest];
-		heap->data[smallest] = tmp;
-		i = smallest;
-	}
-	return (min_req);
+	heap->nodes[0] = heap->nodes[heap->size];
+	heapify_down(heap, 0);
+	return (min_coder);
 }

@@ -5,7 +5,8 @@ long	get_time(void)
 {
 	struct timeval	tv;
 
-	gettimeofday(&tv, NULL);
+	if (gettimeofday(&tv, NULL) == -1)
+		return (-1);
 	return (tv.tv_sec * 1000L + tv.tv_usec / 1000L);
 }
 
@@ -18,6 +19,6 @@ void	ft_usleep(long time_in_ms, t_rules *rules)
 	{
 		if (is_simulation_stopped(rules))
 			break;
-		usleep(500);
+		usleep(100);
 	}
 }

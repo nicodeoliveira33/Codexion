@@ -1,63 +1,68 @@
 #include "codexion.h"
 
-
-static int	init_mutexes(t_rules *rules)
+static int	init_memory(t_rules *rules, t_coder **coders)
 {
-	rules->stop_simulation = 0;
-	rules->start_time = 0;
-	if (pthread_mutex_init(&rules->write_mutex, NULL) != 0)
+	*coders = malloc (sizeof(t_coder) * rules->number_of_coders);
+	if (!(*coders))
 		return (1);
-	if	(pthread_mutex_init(&rules->stop_mutex, NULL) != 0)
-	{
-		pthread_mutex_destroy(&rules->write_mutex);
-		return (1);
-	}	
+
+	rules->dongles = malloc (sizeof(pthread_mutex_t) * rules->number_of_coders);
+	if (!rules->dongles)
+		return (free(*coders), 1);
+
+	rules->dongle_last_use = malloc (sizeof(long) * rules->number_of_coders);
+	if (!rules->dongle_last_use)
+		return (free(*coders), free(rules->dongles), 1);
+
+	memset(*coders, 0, sizeof(t_coder) * rules->number_of_coders);
+	memset(rules->dongles, 0, sizeof(pthread_mutex_t) * rules->number_of_coders);
+	memset(rules->dongle_last_use, 0, sizeof(long) * rules->number_of_coders);
 	return (0);
 }
 
-static int	init_dongles(t_rules *rules)
+static int	init_mutexes(t_rules *rules)
 {
 	int	i;
 
-	rules->dongles = malloc(sizeof(t_dongle) * rules->number_of_coders);
-	if (!rules->dongles)
+	if (pthread_mutex_init(&rules->print_mutex, NULL) != 0)
 		return (1);
+	if (pthread_mutex_init(&rules->state_mutex, NULL) != 0)
+		return (pthread_mutex_destroy(&rules->print_mutex), 1);
+	if (pthread_cond_init(&rules->queue_cond, NULL) != 0)
+	{
+		pthread_mutex_destroy(&rules->print_mutex);
+		pthread_mutex_destroy(&rules->state_mutex);
+		return (1);
+	}
 	i = 0;
 	while (i < rules->number_of_coders)
 	{
-		rules->dongles[i].id = i + 1;
-		rules->dongles[i].taken = 0;
-		rules->dongles[i].last_released = 0;
-		rules->dongles[i].current_holder_id = 0;
-		if (pthread_mutex_init(&rules->dongles[i].mutex, NULL) != 0)
-			return (1);
-		if (pthread_cond_init(&rules->dongles[i].cond, NULL) != 0)
-			return (1);
-		if (heap_init(&rules->dongles[i].queue, rules->number_of_coders) != 0)
+		if (pthread_mutex_init(&rules->dongles[i], NULL) != 0)
 			return (1);
 		i++;
 	}
 	return (0);
 }
 
-static int init_coders(t_rules *rules, t_coder **coders)
+static int	init_coders(t_rules *rules, t_coder **coders)
 {
 	int	i;
 
-	*coders = malloc (sizeof(t_coder) * rules->number_of_coders);
-	if (!(*coders))
-		return (1);
 	i = 0;
 	while (i < rules->number_of_coders)
 	{
 		(*coders)[i].id = i + 1;
-		(*coders)[i].compiled = 0;
-		(*coders)[i].last_compile_start = 0;
+    	(*coders)[i].compiles_done = 0;
+    	(*coders)[i].last_compile_start = 0;
+		(*coders)[i].left_dongle_idx = i;
+    	(*coders)[i].right_dongle_idx = (i + 1) % rules->number_of_coders;
 		(*coders)[i].rules = rules;
-		(*coders)[i].left_dongle = &rules->dongles[i];
-		(*coders)[i].right_dongle = &rules->dongles[(i + 1) % rules->number_of_coders];
 		if (pthread_mutex_init(&(*coders)[i].coder_mutex, NULL) != 0)
+		{
+			while (i > 0)
+				pthread_mutex_destroy(&(*coders)[--i].coder_mutex);
 			return (1);
+		}
 		i++;
 	}
 	return (0);
@@ -65,9 +70,18 @@ static int init_coders(t_rules *rules, t_coder **coders)
 
 int	init_simulation(t_rules *rules, t_coder **coders)
 {
-	if (init_mutexes(rules) != 0 ||
-		init_dongles(rules) != 0 ||
-		init_coders(rules, coders) != 0)
+	if (init_memory(rules, coders) != 0)
 		return (1);
+		
+	rules->priority_queue = init_heap(rules->number_of_coders);
+	if (!rules->priority_queue)
+		return (free_all(rules, *coders), 1);
+ 
+	if (init_mutexes(rules) != 0)
+		return (free_all(rules, *coders), 1);
+
+	if (init_coders(rules, coders) != 0)
+		return (destroy_all_rules_mutexes(rules), free_all(rules, *coders), 1);
+
 	return (0);
 }

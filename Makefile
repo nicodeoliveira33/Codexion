@@ -7,14 +7,16 @@ SRCS_DIR = srcs
 SRCS = $(SRCS_DIR)/main.c \
     	$(SRCS_DIR)/parsing.c \
         $(SRCS_DIR)/time.c \
-        $(SRCS_DIR)/init.c \
-        $(SRCS_DIR)/actions.c \
-        $(SRCS_DIR)/cleanup.c \
-        $(SRCS_DIR)/heap.c \
-        $(SRCS_DIR)/monitor.c \
-        $(SRCS_DIR)/print_utils.c \
-        $(SRCS_DIR)/routine.c \
-        $(SRCS_DIR)/simulation.c
+		$(SRCS_DIR)/clean_and_destroy.c \
+		$(SRCS_DIR)/coder_actions.c \
+		$(SRCS_DIR)/dongles.c \
+		$(SRCS_DIR)/heap.c \
+		$(SRCS_DIR)/heap_utils.c \
+		$(SRCS_DIR)/init.c \
+		$(SRCS_DIR)/monitor.c \
+		$(SRCS_DIR)/print_utils.c \
+		$(SRCS_DIR)/routine.c \
+		$(SRCS_DIR)/simulation.c
 
 OBJS = $(SRCS:.c=.o)
 

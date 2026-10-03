@@ -1,36 +1,26 @@
 #include "codexion.h"
 
 
-int is_simulation_stopped(t_rules *rules)
+bool is_simulation_stopped(t_rules *rules)
 {
-    int stopped;
+    bool status;
 
-    pthread_mutex_lock(&rules->stop_mutex);
-    stopped = rules->stop_simulation;
-    pthread_mutex_unlock(&rules->stop_mutex);
+    pthread_mutex_lock(&rules->state_mutex);
+    status = rules->sim_stop;
+    pthread_mutex_unlock(&rules->state_mutex);
     
-    return (stopped);
+    return (status);
 }
 
 void	set_simulation_stop(t_rules *rules)
 {
-	int	i;
-
-	pthread_mutex_lock(&rules->stop_mutex);
-	rules->stop_simulation = 1;
-	pthread_mutex_unlock(&rules->stop_mutex);
-	
-	i = 0;
-	while (i < rules->number_of_coders)
-	{
-		pthread_mutex_lock(&rules->dongles[i].mutex);
-		pthread_cond_broadcast(&rules->dongles[i].cond);
-		pthread_mutex_unlock(&rules->dongles[i].mutex);
-		i++;
-	}
+	pthread_mutex_lock(&rules->state_mutex);
+	rules->sim_stop = true;
+	pthread_cond_broadcast(&rules->queue_cond);
+	pthread_mutex_unlock(&rules->state_mutex);
 }
 
-void	start_simulation(t_rules *rules, t_coder *coders)
+int	start_simulation(t_rules *rules, t_coder *coders)
 {
 	int	i;
 
@@ -57,4 +47,6 @@ void	start_simulation(t_rules *rules, t_coder *coders)
 		i++;
 	}
 	pthread_join(rules->monitor, NULL);
+
+	return (0);
 }
