@@ -1,91 +1,111 @@
 #include "codexion.h"
 
-static int	check_cooldown(t_rules *rules, int idx)
+static void	order_dongles(t_coder *coder, t_dongle **d1, t_dongle **d2)
 {
-	long	now;
-
-	now = get_time();
-	if (rules->dongle_last_use[idx] == -1)
-		return (1); // Ocupado
-	if ((now - rules->dongle_last_use[idx]) < rules->dongle_cooldown)
-		return (2); // Em cooldown
-	return (0); // Disponível
+	if (coder->left_dongle->id < coder->right_dongle->id)
+	{
+		*d1 = coder->left_dongle;
+		*d2 = coder->right_dongle;
+	}
+	else
+	{
+		*d1 = coder->right_dongle;
+		*d2 = coder->left_dongle;
+	}
 }
 
-static void	wait_in_queue(t_coder *c, int d1, int d2)
+static bool	can_acquire(t_coder *coder, t_dongle *d1,
+	t_dongle *d2, long now)
 {
-	pthread_mutex_lock(&c->rules->state_mutex);
-	while (!c->rules->sim_stop)
+	if (d1->taken || d2->taken)
+		return (false);
+	if ((now - d1->last_release) < coder->rules->dongle_cooldown)
+		return (false);
+	if ((now - d2->last_release) < coder->rules->dongle_cooldown)
+		return (false);
+	if (d1->queue->size == 0 || d2->queue->size == 0)
+		return (false);
+	if (!d1->queue->nodes[0].coder || !d2->queue->nodes[0].coder)
+		return (false);
+	if (d1->queue->nodes[0].coder->id != coder->id)
+		return (false);
+	if (d2->queue->nodes[0].coder->id != coder->id)
+		return (false);
+	return (true);
+}
+
+long	calculate_wait_timeout(t_dongle *d1, t_dongle *d2,
+								long now, long cooldown)
+{
+	long	t1;
+	long	t2;
+	long	timeout;
+
+	if (d1->taken || d2->taken)
+		return (100);
+	t1 = (d1->last_release + cooldown) - now;
+	t2 = (d2->last_release + cooldown) - now;
+	if (t1 < t2)
+		timeout = t1;
+	else
+		timeout = t2;
+	if (timeout < 0)
+		timeout = 0;
+	if (timeout > 100)
+		timeout = 100;
+	return (timeout);
+}
+
+int	take_dongles(t_coder *coder)
+{
+	t_dongle		*d1;
+	t_dongle		*d2;
+	long			now;
+
+	order_dongles(coder, &d1, &d2);
+	insert_dongles(coder, &d1, &d2);
+	while (!is_simulation_stopped(coder->rules))
 	{
-		if (c->rules->priority_queue->size > 0
-			&& c->rules->priority_queue->nodes[0].coder->id == c->id)
+		pthread_mutex_lock(&d1->mutex);
+		pthread_mutex_lock(&d2->mutex);
+		now = get_time();
+		if (can_acquire(coder, d1, d2, now))
 		{
-			if (check_cooldown(c->rules, d1) == 0 && check_cooldown(c->rules, d2) == 0)
-			{
-				c->rules->dongle_last_use[d1] = -1;
-				c->rules->dongle_last_use[d2] = -1;
-				heap_extract_min(c->rules->priority_queue);
-				break ;
-			}
-			if (check_cooldown(c->rules, d1) != 1 && check_cooldown(c->rules, d2) != 1)
-			{
-				pthread_mutex_unlock(&c->rules->state_mutex);
-				usleep(500);
-				pthread_mutex_lock(&c->rules->state_mutex);
-				continue ;
-			}
+			d1->taken = true;
+			d2->taken = true;
+			heap_extract_min(d1->queue);
+			heap_extract_min(d2->queue);
+			print_dongles(coder, "has taken a dongle");
+			pthread_mutex_unlock(&d2->mutex);
+			pthread_mutex_unlock(&d1->mutex);
+			return (0);
 		}
-		pthread_cond_wait(&c->rules->queue_cond, &c->rules->state_mutex);
+		wait_for_signal(coder, d1, d2, now);
 	}
-	pthread_mutex_unlock(&c->rules->state_mutex);
-}
-
-void	take_dongles(t_coder *coder)
-{
-	long	key;
-	int		d1;
-	int		d2;
-
-	key = calculate_key(coder);
-	d1 = coder->left_dongle_idx;
-	d2 = coder->right_dongle_idx;
-	if (d1 > d2)
-	{
-		d1 = coder->right_dongle_idx;
-		d2 = coder->left_dongle_idx;
-	}
-	pthread_mutex_lock(&coder->rules->state_mutex);
-	heap_insert(coder->rules->priority_queue, coder, key);
-	pthread_cond_broadcast(&coder->rules->queue_cond);
-	pthread_mutex_unlock(&coder->rules->state_mutex);
-	
-	wait_in_queue(coder, d1, d2);
-	
-	pthread_mutex_lock(&coder->rules->dongles[d1]);
-	print_status(coder, "has taken a dongle");
-	pthread_mutex_lock(&coder->rules->dongles[d2]);
-	print_status(coder, "has taken a dongle");
+	return (1);
 }
 
 void	put_dongles(t_coder *coder)
 {
-	long	now;
+	t_dongle	*d1;
+	t_dongle	*d2;
+	t_coder		*next1;
+	t_coder		*next2;
 
-	now = get_time();
-	pthread_mutex_lock(&coder->rules->state_mutex);
-	coder->rules->dongle_last_use[coder->left_dongle_idx] = now;
-	coder->rules->dongle_last_use[coder->right_dongle_idx] = now;
-	pthread_cond_broadcast(&coder->rules->queue_cond);
-	pthread_mutex_unlock(&coder->rules->state_mutex);
-	
-	pthread_mutex_unlock(&coder->rules->dongles[coder->left_dongle_idx]);
-	pthread_mutex_unlock(&coder->rules->dongles[coder->right_dongle_idx]);
-}
-
-void	take_dongle(t_coder *coder)
-{
-	pthread_mutex_lock(&coder->rules->dongles[coder->left_dongle_idx]);
-	print_status(coder, "has taken a dongle");
-	ft_usleep(coder->rules->time_to_burnout, coder->rules);
-	pthread_mutex_unlock(&coder->rules->dongles[coder->left_dongle_idx]);
+	order_dongles(coder, &d1, &d2);
+	pthread_mutex_lock(&d1->mutex);
+	pthread_mutex_lock(&d2->mutex);
+	d1->taken = false;
+	d1->last_release = get_time();
+	d2->taken = false;
+	d2->last_release = get_time();
+	next1 = NULL;
+	next2 = NULL;
+	if (d1->queue->size > 0)
+		next1 = d1->queue->nodes[0].coder;
+	if (d2->queue->size > 0)
+		next2 = d2->queue->nodes[0].coder;
+	pthread_mutex_unlock(&d2->mutex);
+	pthread_mutex_unlock(&d1->mutex);
+	notify_coders(next1, next2);
 }

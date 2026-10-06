@@ -20,7 +20,6 @@ static long	ft_atol(const char *nptr)
 static int	parse_rules(int ac, char **av, t_rules *rules)
 {
 	(void)ac;
-
 	rules->number_of_coders = ft_atol(av[1]);
 	rules->time_to_burnout = ft_atol(av[2]);
 	rules->time_to_compile = ft_atol(av[3]);
@@ -40,12 +39,13 @@ static int	parse_rules(int ac, char **av, t_rules *rules)
 static int	is_digit_string(const char *string)
 {
 	int	i;
+
 	if (!string || !string[0])
 		return (1);
 	i = 0;
 	while (string[i])
 	{
-		if (string[i] < '0'|| string[i] > '9')
+		if (string[i] < '0' || string[i] > '9')
 			return (1);
 		i++;
 	}
@@ -67,11 +67,11 @@ static int	parse_scheduler(const char *str, t_rules *rules)
 	return (1);
 }
 
-int parser(int ac, char **av, t_rules *rules)
+int	parser(int ac, char **av, t_rules *rules)
 {
 	int		i;
-	(void)ac;
 
+	(void)ac;
 	i = 1;
 	while (i < 8)
 	{
@@ -79,10 +79,8 @@ int parser(int ac, char **av, t_rules *rules)
 			return (1);
 		i++;
 	}
-
 	if (parse_rules(ac, av, rules) != 0)
 		return (1);
-
 	if (parse_scheduler(av[8], rules) != 0)
 		return (1);
 	return (0);

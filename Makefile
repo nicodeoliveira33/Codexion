@@ -8,8 +8,8 @@ SRCS = $(SRCS_DIR)/main.c \
     	$(SRCS_DIR)/parsing.c \
         $(SRCS_DIR)/time.c \
 		$(SRCS_DIR)/clean_and_destroy.c \
-		$(SRCS_DIR)/coder_actions.c \
 		$(SRCS_DIR)/dongles.c \
+		$(SRCS_DIR)/dongles_utils.c \
 		$(SRCS_DIR)/heap.c \
 		$(SRCS_DIR)/heap_utils.c \
 		$(SRCS_DIR)/init.c \

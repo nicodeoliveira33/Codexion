@@ -13,12 +13,13 @@ t_heap	*init_heap(int capacity)
 		free(heap);
 		return (NULL);
 	}
+	memset(heap->nodes, 0, sizeof(t_heap_node) * capacity);
 	heap->capacity = capacity;
 	heap->size = 0;
 	return (heap);
 }
 
-void	heap_insert(t_heap *heap, t_coder *coder, long key)
+void	heap_insert(t_heap *heap, t_coder *coder, long key, int sequence)
 {
 	int	i;
 
@@ -27,7 +28,7 @@ void	heap_insert(t_heap *heap, t_coder *coder, long key)
 	i = heap->size;
 	heap->nodes[i].coder = coder;
 	heap->nodes[i].key = key;
-	heap->nodes[i].id_tie = coder->id;
+	heap->nodes[i].id_tie = sequence;
 	heap->size++;
 	while (i > 0 && should_swap(heap->nodes[(i - 1) / 2], heap->nodes[i]))
 	{

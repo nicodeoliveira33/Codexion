@@ -6,12 +6,11 @@ static bool	check_burnout(t_coder *coder)
 	long	last_compile;
 
 	now = get_time();
-	pthread_mutex_lock(&coder->coder_mutex);
+	pthread_mutex_lock(&coder->mutex);
 	last_compile = coder->last_compile_start;
-	pthread_mutex_unlock(&coder->coder_mutex);
+	pthread_mutex_unlock(&coder->mutex);
 	if ((now - last_compile) >= coder->rules->time_to_burnout)
 	{
-		set_simulation_stop(coder->rules);
 		print_burnout(coder, "burned out");
 		return (true);
 	}
@@ -29,15 +28,15 @@ static bool	check_compiles(t_rules *rules, t_coder *coders)
 	finished = 0;
 	while (i < rules->number_of_coders)
 	{
-		pthread_mutex_lock(&coders[i].coder_mutex);
+		pthread_mutex_lock(&coders[i].mutex);
 		if (coders[i].compiles_done >= rules->number_of_compiles_required)
 			finished++;
-		pthread_mutex_unlock(&coders[i].coder_mutex);
+		pthread_mutex_unlock(&coders[i].mutex);
 		i++;
 	}
 	if (finished >= rules->number_of_coders)
 	{
-		set_simulation_stop(rules);
+		set_simulation_stop(rules, coders);
 		return (true);
 	}
 	return (false);
@@ -58,7 +57,10 @@ void	*monitor_routine(void *arg)
 		while (i < rules->number_of_coders)
 		{
 			if (check_burnout(&coders[i]))
+			{
+				set_simulation_stop(rules, coders);
 				return (NULL);
+			}
 			i++;
 		}
 		if (check_compiles(rules, coders))
