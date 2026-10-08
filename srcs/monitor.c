@@ -1,3 +1,15 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   monitor.c                                          :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/10/08 16:51:44 by ndias-de          #+#    #+#             */
+/*   Updated: 2026/10/08 18:54:19 by ndias-de         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "codexion.h"
 
 static bool	check_burnout(t_coder *coder)
@@ -10,10 +22,7 @@ static bool	check_burnout(t_coder *coder)
 	last_compile = coder->last_compile_start;
 	pthread_mutex_unlock(&coder->mutex);
 	if ((now - last_compile) >= coder->rules->time_to_burnout)
-	{
-		print_burnout(coder, "burned out");
 		return (true);
-	}
 	return (false);
 }
 
@@ -22,8 +31,6 @@ static bool	check_compiles(t_rules *rules, t_coder *coders)
 	int	i;
 	int	finished;
 
-	if (rules->number_of_compiles_required == -1)
-		return (false);
 	i = 0;
 	finished = 0;
 	while (i < rules->number_of_coders)
@@ -50,7 +57,6 @@ void	*monitor_routine(void *arg)
 
 	coders = (t_coder *)arg;
 	rules = coders[0].rules;
-	usleep(1000);
 	while (!is_simulation_stopped(rules))
 	{
 		i = 0;
@@ -59,13 +65,14 @@ void	*monitor_routine(void *arg)
 			if (check_burnout(&coders[i]))
 			{
 				set_simulation_stop(rules, coders);
+				print_burnout(&coders[i], "burned out");
 				return (NULL);
 			}
 			i++;
 		}
 		if (check_compiles(rules, coders))
 			return (NULL);
-		usleep(500);
+		usleep(100);
 	}
 	return (NULL);
 }

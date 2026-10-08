@@ -1,51 +1,100 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   heap.c                                             :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/10/06 15:32:15 by ndias-de          #+#    #+#             */
+/*   Updated: 2026/10/08 20:08:59 by ndias-de         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "codexion.h"
 
-t_heap	*init_heap(int capacity)
+static void	swap_heap(t_coder **parent, t_coder **current)
 {
-	t_heap	*heap;
+	t_coder	*temp;
 
-	heap = malloc(sizeof(t_heap));
-	if (!heap)
-		return (NULL);
-	heap->nodes = malloc(sizeof(t_heap_node) * capacity);
-	if (!heap->nodes)
-	{
-		free(heap);
-		return (NULL);
-	}
-	memset(heap->nodes, 0, sizeof(t_heap_node) * capacity);
-	heap->capacity = capacity;
-	heap->size = 0;
-	return (heap);
+	temp = *current;
+	*current = *parent;
+	*parent = temp;
 }
 
-void	heap_insert(t_heap *heap, t_coder *coder, long key, int sequence)
+static void	heapify_up(t_heap *heap, int current, t_scheduler scheduler)
 {
-	int	i;
+	int		parent;
+	t_coder	**coders;
 
-	if (!heap || heap->size >= heap->capacity)
-		return ;
-	i = heap->size;
-	heap->nodes[i].coder = coder;
-	heap->nodes[i].key = key;
-	heap->nodes[i].id_tie = sequence;
+	coders = heap->coders;
+	while (current > 0)
+	{
+		parent = (current - 1) / 2;
+		if (has_priority(coders[current], coders[parent], scheduler))
+		{
+			swap_heap(&coders[parent], &coders[current]);
+			current = parent;
+		}
+		else
+			break ;
+	}
+}
+
+static void	heapify_down(t_heap *heap, int current, t_scheduler scheduler)
+{
+	int		left;
+	int		right;
+	int		smallest;
+	t_coder	**coders;
+
+	coders = heap->coders;
+	while (1)
+	{
+		left = 2 * current + 1;
+		right = 2 * current + 2;
+		smallest = current;
+		if (left < heap->size
+			&& has_priority(coders[left], coders[smallest], scheduler))
+			smallest = left;
+		if (right < heap->size
+			&& has_priority(coders[right], coders[smallest], scheduler))
+			smallest = right;
+		if (smallest == current)
+			break ;
+		swap_heap(&coders[current], &coders[smallest]);
+		current = smallest;
+	}
+}
+
+int	heap_insert(t_heap *heap, t_coder *coder, t_scheduler scheduler)
+{
+	int		current;
+	t_coder	**coders;
+
+	coders = heap->coders;
+	if (heap->size >= heap->capacity)
+		return (1);
+	coders[heap->size] = coder;
 	heap->size++;
-	while (i > 0 && should_swap(heap->nodes[(i - 1) / 2], heap->nodes[i]))
-	{
-		swap_nodes(&heap->nodes[(i - 1) / 2], &heap->nodes[i]);
-		i = (i - 1) / 2;
-	}
+	current = heap->size - 1;
+	heapify_up(heap, current, scheduler);
+	return (0);
 }
 
-t_coder	*heap_extract_min(t_heap *heap)
+void	heap_remove(t_heap *heap, t_coder *coder, t_scheduler scheduler)
 {
-	t_coder	*min_coder;
+	int		i;
 
-	if (!heap || heap->size <= 0)
-		return (NULL);
-	min_coder = heap->nodes[0].coder;
+	i = 0;
+	while (i < heap->size && heap->coders[i] != coder)
+		i++;
+	if (i == heap->size)
+		return ;
+	heap->coders[i] = heap->coders[heap->size - 1];
 	heap->size--;
-	heap->nodes[0] = heap->nodes[heap->size];
-	heapify_down(heap, 0);
-	return (min_coder);
+	if (i < heap->size)
+	{
+		heapify_down(heap, i, scheduler);
+		heapify_up(heap, i, scheduler);
+	}
 }

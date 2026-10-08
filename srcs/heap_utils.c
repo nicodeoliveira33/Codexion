@@ -1,56 +1,43 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   heap_utils.c                                       :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/10/06 17:52:05 by ndias-de          #+#    #+#             */
+/*   Updated: 2026/10/08 18:51:23 by ndias-de         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "codexion.h"
 
-bool	should_swap(t_heap_node parent, t_heap_node child)
+void	heap_destroy(t_heap *heap)
 {
-	if (parent.key > child.key)
-		return (true);
-	if (parent.key == child.key && parent.id_tie > child.id_tie)
-		return (true);
-	return (false);
+	if (!heap)
+		return ;
+	if (heap->coders)
+		free(heap->coders);
+	free(heap);
 }
 
-void	swap_nodes(t_heap_node *a, t_heap_node *b)
+static long	get_sort_key(t_coder *coder, t_scheduler scheduler)
 {
-	t_heap_node	temp;
-
-	temp = *a;
-	*a = *b;
-	*b = temp;
+	if (scheduler == POLICY_FIFO)
+		return (coder->request_order);
+	else if (scheduler == POLICY_EDF)
+		return (coder->last_compile_start + coder->rules->time_to_burnout);
+	return (0);
 }
 
-long	calculate_key(t_coder *coder)
+bool	has_priority(t_coder *c1, t_coder *c2, t_scheduler schedule)
 {
-	long	key;
+	long	key1;
+	long	key2;
 
-	pthread_mutex_lock(&coder->mutex);
-	if (coder->rules->scheduler == POLICY_FIFO)
-		key = get_time();
-	else
-		key = coder->last_compile_start + coder->rules->time_to_burnout;
-	pthread_mutex_unlock(&coder->mutex);
-	return (key);
-}
-
-void	heapify_down(t_heap *heap, int i)
-{
-	int	left;
-	int	right;
-	int	smallest;
-
-	while (true)
-	{
-		left = 2 * i + 1;
-		right = 2 * i + 2;
-		smallest = i;
-		if (left < heap->size
-			&& should_swap(heap->nodes[smallest], heap->nodes[left]))
-			smallest = left;
-		if (right < heap->size
-			&& should_swap(heap->nodes[smallest], heap->nodes[right]))
-			smallest = right;
-		if (smallest == i)
-			break ;
-		swap_nodes(&heap->nodes[i], &heap->nodes[smallest]);
-		i = smallest;
-	}
+	key1 = get_sort_key(c1, schedule);
+	key2 = get_sort_key(c2, schedule);
+	if (key1 == key2)
+		return (c1->request_order < c2->request_order);
+	return (key1 < key2);
 }

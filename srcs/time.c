@@ -1,40 +1,46 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   time.c                                             :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/10/06 17:14:18 by ndias-de          #+#    #+#             */
+/*   Updated: 2026/10/08 15:25:54 by ndias-de         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "codexion.h"
 
 long	get_time(void)
 {
-	struct timespec	ts;
+	struct timeval	tv;
 
-	if (clock_gettime(CLOCK_REALTIME, &ts) == -1)
+	if (gettimeofday(&tv, NULL) == -1)
 		return (-1);
-	return (ts.tv_sec * 1000L + ts.tv_nsec / 1000000L);
+	return (tv.tv_sec * 1000L + tv.tv_usec / 1000L);
 }
 
 void	ft_usleep(long time_in_ms, t_rules *rules)
 {
 	long	start;
+	long	remaining;
 
 	start = get_time();
 	while ((get_time() - start) < time_in_ms)
 	{
 		if (is_simulation_stopped(rules))
 			break ;
-		usleep(100);
+		remaining = time_in_ms - (get_time() - start);
+		if (remaining > 100)
+			usleep(100000);
+		else
+			usleep(remaining * 1000);
 	}
 }
 
-long	calculate_timeout(t_dongle *d1, t_dongle *d2, long now, long cooldown)
+void	convert_time(long timestamp, struct timespec *ts)
 {
-	long	timeout_d1;
-	long	timeout_d2;
-	long	timeout_ms;
-
-	timeout_d1 = (d1->last_release + cooldown) - now;
-	timeout_d2 = (d2->last_release + cooldown) - now;
-	if (timeout_d1 < timeout_d2)
-		timeout_ms = timeout_d1;
-	else
-		timeout_ms = timeout_d2;
-	if (timeout_ms < 0)
-		timeout_ms = 0;
-	return (timeout_ms);
+	ts->tv_sec = timestamp / 1000;
+	ts->tv_nsec = (timestamp % 1000) * 1000000L;
 }

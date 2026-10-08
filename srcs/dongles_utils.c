@@ -1,59 +1,57 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   dongles_utils.c                                    :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/10/08 19:38:58 by ndias-de          #+#    #+#             */
+/*   Updated: 2026/10/08 20:18:11 by ndias-de         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "codexion.h"
 
-void	insert_dongles(t_coder *coder, t_dongle **d1, t_dongle **d2)
+static bool	coder_shares_dongles(t_coder *a, t_coder *b)
 {
-	long	key;
-	int		seq1;
-	int		seq2;
-
-	pthread_mutex_lock(&(*d1)->mutex);
-	pthread_mutex_lock(&(*d2)->mutex);
-	key = calculate_key(coder);
-	seq1 = (*d1)->sequence_counter++;
-	seq2 = (*d2)->sequence_counter++;
-	heap_insert((*d1)->queue, coder, key, seq1);
-	heap_insert((*d2)->queue, coder, key, seq2);
-	pthread_mutex_unlock(&(*d2)->mutex);
-	pthread_mutex_unlock(&(*d1)->mutex);
+	return (a->left_dongle == b->left_dongle
+		|| a->left_dongle == b->right_dongle
+		|| a->right_dongle == b->left_dongle
+		|| a->right_dongle == b->right_dongle);
 }
 
-void	notify_coders(t_coder *top1, t_coder *top2)
+bool	has_rival(t_rules *rules, t_coder *coder)
 {
-	if (top1)
+	int		i;
+	t_coder	*other;
+
+	i = 0;
+	while (i < rules->wait_queue->size)
 	{
-		pthread_mutex_lock(&top1->mutex);
-		top1->notified = true;
-		pthread_cond_signal(&top1->wake_up);
-		pthread_mutex_unlock(&top1->mutex);
+		other = rules->wait_queue->coders[i];
+		if (other != coder
+			&& coder_shares_dongles(other, coder)
+			&& has_priority(other, coder, rules->scheduler)
+			&& !other->left_dongle->taken
+			&& !other->right_dongle->taken)
+			return (true);
+		i++;
 	}
-	if (top2)
-	{
-		pthread_mutex_lock(&top2->mutex);
-		top2->notified = true;
-		pthread_cond_signal(&top2->wake_up);
-		pthread_mutex_unlock(&top2->mutex);
-	}
+	return (false);
 }
 
-void	wait_for_signal(t_coder *coder, t_dongle *d1, t_dongle *d2, long now)
+void	wake_rivals(t_rules *rules, t_coder *coder)
 {
-	long			timeout_ms;
-	struct timespec	ts;
-	int				rc;
+	int		i;
+	t_coder	*other;
 
-	timeout_ms = calculate_timeout(d1, d2, now,
-			coder->rules->dongle_cooldown);
-	ts.tv_sec = timeout_ms / 1000;
-	ts.tv_nsec = (timeout_ms % 1000) * 1000000;
-	pthread_mutex_unlock(&d2->mutex);
-	pthread_mutex_unlock(&d1->mutex);
-	pthread_mutex_lock(&coder->mutex);
-	if (!coder->notified && !is_simulation_stopped(coder->rules))
+	i = 0;
+	while (i < rules->wait_queue->size)
 	{
-		rc = pthread_cond_timedwait(&coder->wake_up,
-				&coder->mutex, &ts);
-		(void)rc;
+		other = rules->wait_queue->coders[i];
+		if (other != coder
+			&& coder_shares_dongles(other, coder))
+			pthread_cond_signal(&other->wake_up);
+		i++;
 	}
-	coder->notified = false;
-	pthread_mutex_unlock(&coder->mutex);
 }

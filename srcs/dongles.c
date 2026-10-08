@@ -1,111 +1,92 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   dongles.c                                          :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/10/08 15:38:36 by ndias-de          #+#    #+#             */
+/*   Updated: 2026/10/08 20:10:58 by ndias-de         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "codexion.h"
 
-static void	order_dongles(t_coder *coder, t_dongle **d1, t_dongle **d2)
+static long	find_deadline(t_rules *rules, t_coder *coder)
 {
-	if (coder->left_dongle->id < coder->right_dongle->id)
-	{
-		*d1 = coder->left_dongle;
-		*d2 = coder->right_dongle;
-	}
+	long		left;
+	long		right;
+	long		deadline;
+
+	left = coder->left_dongle->last_release;
+	right = coder->right_dongle->last_release;
+	if (left > right)
+		deadline = left;
 	else
-	{
-		*d1 = coder->right_dongle;
-		*d2 = coder->left_dongle;
-	}
+		deadline = right;
+	deadline += rules->dongle_cooldown;
+	return (deadline);
 }
 
-static bool	can_acquire(t_coder *coder, t_dongle *d1,
-	t_dongle *d2, long now)
+static void	cond_selector(t_rules *rules, t_coder *coder)
 {
-	if (d1->taken || d2->taken)
-		return (false);
-	if ((now - d1->last_release) < coder->rules->dongle_cooldown)
-		return (false);
-	if ((now - d2->last_release) < coder->rules->dongle_cooldown)
-		return (false);
-	if (d1->queue->size == 0 || d2->queue->size == 0)
-		return (false);
-	if (!d1->queue->nodes[0].coder || !d2->queue->nodes[0].coder)
-		return (false);
-	if (d1->queue->nodes[0].coder->id != coder->id)
-		return (false);
-	if (d2->queue->nodes[0].coder->id != coder->id)
+	struct timespec	ts;
+	long			deadline;
+	t_dongle		*left;
+	t_dongle		*right;
+
+	left = coder->left_dongle;
+	right = coder->right_dongle;
+	deadline = find_deadline(rules, coder);
+	convert_time(deadline, &ts);
+	if (!left->taken && !right->taken
+		&& get_time() < deadline
+		&& !has_rival(rules, coder))
+		pthread_cond_timedwait(&coder->wake_up, &rules->global_mutex, &ts);
+	else
+		pthread_cond_wait(&coder->wake_up, &rules->global_mutex);
+}
+
+static bool	is_available(t_rules *rules, t_coder *coder)
+{
+	t_dongle	*left;
+	t_dongle	*right;
+
+	left = coder->left_dongle;
+	right = coder->right_dongle;
+	if (left->taken || right->taken
+		|| get_time() - left->last_release < rules->dongle_cooldown
+		|| get_time() - right->last_release < rules->dongle_cooldown
+		|| has_rival(rules, coder))
 		return (false);
 	return (true);
 }
 
-long	calculate_wait_timeout(t_dongle *d1, t_dongle *d2,
-								long now, long cooldown)
+int	take_dongles(t_rules *rules, t_coder *coder)
 {
-	long	t1;
-	long	t2;
-	long	timeout;
-
-	if (d1->taken || d2->taken)
-		return (100);
-	t1 = (d1->last_release + cooldown) - now;
-	t2 = (d2->last_release + cooldown) - now;
-	if (t1 < t2)
-		timeout = t1;
-	else
-		timeout = t2;
-	if (timeout < 0)
-		timeout = 0;
-	if (timeout > 100)
-		timeout = 100;
-	return (timeout);
+	pthread_mutex_lock(&rules->global_mutex);
+	coder->request_order = ++rules->request_counter;
+	heap_insert(rules->wait_queue, coder, rules->scheduler);
+	while (!is_available(rules, coder) && !is_simulation_stopped(rules))
+		cond_selector(rules, coder);
+	if (is_simulation_stopped(rules))
+		return (pthread_mutex_unlock(&rules->global_mutex), 1);
+	heap_remove(rules->wait_queue, coder, rules->scheduler);
+	coder->left_dongle->taken = true;
+	coder->right_dongle->taken = true;
+	print_status(coder, "has taken a dongle");
+	print_status(coder, "has taken a dongle");
+	pthread_mutex_unlock(&rules->global_mutex);
+	return (0);
 }
 
-int	take_dongles(t_coder *coder)
+void	put_dongles(t_rules *rules, t_coder *coder)
 {
-	t_dongle		*d1;
-	t_dongle		*d2;
-	long			now;
-
-	order_dongles(coder, &d1, &d2);
-	insert_dongles(coder, &d1, &d2);
-	while (!is_simulation_stopped(coder->rules))
-	{
-		pthread_mutex_lock(&d1->mutex);
-		pthread_mutex_lock(&d2->mutex);
-		now = get_time();
-		if (can_acquire(coder, d1, d2, now))
-		{
-			d1->taken = true;
-			d2->taken = true;
-			heap_extract_min(d1->queue);
-			heap_extract_min(d2->queue);
-			print_dongles(coder, "has taken a dongle");
-			pthread_mutex_unlock(&d2->mutex);
-			pthread_mutex_unlock(&d1->mutex);
-			return (0);
-		}
-		wait_for_signal(coder, d1, d2, now);
-	}
-	return (1);
-}
-
-void	put_dongles(t_coder *coder)
-{
-	t_dongle	*d1;
-	t_dongle	*d2;
-	t_coder		*next1;
-	t_coder		*next2;
-
-	order_dongles(coder, &d1, &d2);
-	pthread_mutex_lock(&d1->mutex);
-	pthread_mutex_lock(&d2->mutex);
-	d1->taken = false;
-	d1->last_release = get_time();
-	d2->taken = false;
-	d2->last_release = get_time();
-	next1 = NULL;
-	next2 = NULL;
-	if (d1->queue->size > 0)
-		next1 = d1->queue->nodes[0].coder;
-	if (d2->queue->size > 0)
-		next2 = d2->queue->nodes[0].coder;
-	pthread_mutex_unlock(&d2->mutex);
-	pthread_mutex_unlock(&d1->mutex);
-	notify_coders(next1, next2);
+	pthread_mutex_lock(&rules->global_mutex);
+	coder->left_dongle->taken = false;
+	coder->right_dongle->taken = false;
+	coder->left_dongle->last_release = get_time();
+	coder->right_dongle->last_release = coder->left_dongle->last_release;
+	wake_rivals(rules, coder);
+	pthread_mutex_unlock(&rules->global_mutex);
 }
