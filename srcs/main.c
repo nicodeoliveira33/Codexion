@@ -6,7 +6,7 @@
 /*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/06 13:04:43 by ndias-de          #+#    #+#             */
-/*   Updated: 2026/10/08 20:27:21 by ndias-de         ###   ########.fr       */
+/*   Updated: 2026/10/12 17:32:52 by ndias-de         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,19 +20,19 @@ int	main(int ac, char **av)
 	memset(&rules, 0, sizeof(t_rules));
 	if (ac != 9 || parser(ac, av, &rules) == 1)
 	{
-		write(2, "\nInvalid Input!\n", 16);
+		fprintf(stderr, "\nInvalid Input!\n");
 		print_invalid_args();
 		return (1);
 	}
 	coders = NULL;
 	if (init_sim(&rules, &coders) != 0)
 	{
-		write(2, "Init error\n", 11);
+		fprintf(stderr, "Init error\n");
 		return (1);
 	}
 	if (start_sim(&rules, coders) != 0)
 	{
-		write(2, "Start sim error!\n", 17);
+		fprintf(stderr, "Start sim error!\n");
 		cleanup(&rules, &coders);
 		return (1);
 	}
