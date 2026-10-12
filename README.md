@@ -34,7 +34,7 @@ When several coders compete for the same dongles, access is arbitrated by a sche
 | `dongles.c`, `dongles_utils.c` | Taking/releasing dongles, cooldown, rival detection, wake-ups |
 | `heap.c`, `heap_utils.c` | Min-heap priority queue and the fifo/edf comparison |
 | `monitor.c` | Monitor thread: burnout detection and "all done" detection |
-| `print_utils.c` | Serialised logging and usage message |
+| `print_utils.c` | Serialised logging (single lines and the compile block) and usage message |
 | `time.c` | `get_time`, `ft_usleep`, ms → `timespec` conversion |
 | `clean_and_destroy.c` | Destruction of mutexes/conditions and freeing of memory |
 
@@ -76,12 +76,13 @@ make re       # fclean + all
 ```bash
 ./codexion 4 800 150 150 150 5 10 fifo
 ./codexion 5 2000 200 200 200 3 200 edf
-./codexion 1 300 100 100 100 3 0 fifo     # single coder: takes one dongle and burns out
+./codexion 1 300 100 100 100 3 0 fifo
 ```
 
 ### 📜 Log format
 
 ```
+timestamp_in_ms X has taken a dongle
 timestamp_in_ms X has taken a dongle
 timestamp_in_ms X is compiling
 timestamp_in_ms X is debugging
@@ -89,7 +90,7 @@ timestamp_in_ms X is refactoring
 timestamp_in_ms X burned out
 ```
 
-The timestamp is in milliseconds since the start of the simulation, `X` is the coder number (1 to `number_of_coders`). Each compile is preceded by two `has taken a dongle` lines. Once the simulation is stopped, no other line is printed after `burned out`.
+The timestamp is in milliseconds since the start of the simulation, `X` is the coder number (1 to `number_of_coders`). Each `is compiling` line is immediately preceded by exactly two `has taken a dongle` lines of the same coder, with no line from any other coder in between. Once the simulation is stopped, no other line is printed after `burned out`.
 
 ---
 
@@ -104,8 +105,25 @@ The timestamp is in milliseconds since the start of the simulation, `X` is the c
 | **No preemption** | Kept by design: dongles are released only by their owner in `put_dongles`. This is safe because the other conditions are broken. |
 | **Circular wait** ✅ | Impossible: since nobody waits while holding a dongle, no cycle of "holds A, waits for B" can form. No lock ordering of dongles is needed. |
 
-🔗 To avoid deadlocks between **mutexes**, a fixed nesting order is respected everywhere:
-`global_mutex` → `print_mutex` → `stop_sim_mutex`. The per-coder mutex (`coder->mutex`) is never held while another mutex is taken.
+🔗 To avoid deadlocks between **mutexes**, they are always requested in the same
+order, from the lowest to the highest level:
+
+| Level | Mutex | May be requested while holding |
+|-------|-------|--------------------------------|
+| 1 | `global_mutex` | no other mutex |
+| 2 | `print_mutex` | `global_mutex` |
+| 3 | `stop_sim_mutex`, `coder->mutex` | `global_mutex` and `print_mutex` |
+
+- A thread may **skip** a level (for example, `take_dongles` holds `global_mutex`
+  while `is_simulation_stopped` locks `stop_sim_mutex`), but it **never** requests
+  a lower level while holding a higher one.
+- `stop_sim_mutex` and `coder->mutex` are never held at the same time, so no order
+  between them is needed. The monitor releases `coder->mutex` before calling
+  `set_simulation_stop` (which needs `global_mutex`) or `print_burnout` (which
+  needs `print_mutex`).
+- This removes the **circular wait** condition: a thread holding a high-level mutex
+  never waits for a low-level one, so no cycle "A waits for B, B waits for A" can
+  form between threads.
 
 ### 🍽️ Starvation prevention
 
@@ -124,7 +142,14 @@ A dedicated monitor thread 👀 loops over all coders every 100 microseconds (`u
 
 ### 🖨️ Log serialisation
 
-Every line is printed while holding `print_mutex`, so two messages never mix. `print_status` re-checks the stop flag **inside** the print mutex, which guarantees that no state message is printed after the `burned out` line.
+Every line is printed while holding `print_mutex`, so two messages never mix on a single line. `print_status` (used for `is debugging`, `is refactoring` and the single-coder case) locks the mutex, re-checks the stop flag **inside** it and prints one line, which guarantees that no state message is printed after the `burned out` line.
+
+The three lines that start a compile (`has taken a dongle` twice and `is compiling`) are printed as **one block**, so that no line of another coder can appear between them:
+
+- `take_dongles` locks `print_mutex` right before the first `has taken a dongle` (after the stop flag has been checked, so the early-exit path never leaves it locked) and `compile()` unlocks it right after `is compiling`, before the compile sleep.
+- Inside the block the lines are printed by `print_take_and_compile`. This function does **not** lock: its caller must already hold `print_mutex`. It checks the stop flag before every line, so nothing is printed after `burned out`; if the simulation stops in the middle of a block, the remaining lines are simply not printed.
+- `compile()` always releases `print_mutex` and `global_mutex` before sleeping, even when nothing was printed.
+- The monitor only waits for the end of the current block to print `burned out`. A block is three `printf` calls (microseconds), far below the 10 ms limit.
 
 ### 🧩 Other cases
 
@@ -140,8 +165,8 @@ Every line is printed while holding `print_mutex`, so two messages never mix. `p
 
 | 🔒 Mutex | 🛡️ Protects |
 |-------|----------|
-| `rules->global_mutex` | Dongle state (`taken`, `last_release`), the wait queue (heap) and `request_counter` |
-| `rules->print_mutex` | Output on `stdout` (one line at a time) |
+| `rules->global_mutex` | Dongle state (`taken`, `last_release`), the wait queue (heap) and `request_counter`. Held from the start of `take_dongles` until `compile()` releases it before the compile sleep (except while a coder waits on its condition variable, which releases it) |
+| `rules->print_mutex` | Output on `stdout`: one line at a time, or the three-line compile block (locked in `take_dongles`, unlocked in `compile()`) |
 | `rules->stop_sim_mutex` | The `sim_stop` flag |
 | `coder->mutex` (one per coder) | `last_compile_start` and `compiles_done`, written by the coder and read by the monitor |
 
@@ -163,9 +188,11 @@ A single min-heap (`wait_queue`, capacity = `number_of_coders`) holds the coders
 
 **3️⃣ Monitor reading data being written by a coder.** `last_compile_start` and `compiles_done` are always accessed with the coder's own mutex. The monitor copies the value under the lock and compares outside of it.
 
-**4️⃣ Output after burnout.** The stop flag is set before `burned out` is printed, and `print_status` checks the flag again inside `print_mutex`.
+**4️⃣ Output after burnout.** The stop flag is set before `burned out` is printed, and the print functions check the flag again while holding `print_mutex`.
 
 **5️⃣ Stop signal vs. sleeping coders.** The flag is written under `stop_sim_mutex` and read through `is_simulation_stopped`; after setting it, every coder is signalled under `global_mutex`, so nobody stays asleep.
+
+**6️⃣ Lines of other coders inside a compile block.** Coders that are debugging or refactoring do not need `global_mutex`, only `print_mutex`. If the block were printed line by line, one of their lines could be printed between `has taken a dongle` and `is compiling`. Holding `print_mutex` for the whole block makes them wait for its end.
 
 ### 💬 Communication between coders and monitor
 
@@ -180,14 +207,20 @@ The project was compiled and tested with the following checks:
 | 🔬 Test | ✅ Result |
 |------|--------|
 | `make`, then `make` again | No warnings; no relink on the second run |
-| 11 invalid argument sets (no args, too few/many, negative, decimal, zero, `> INT_MAX`, `FIFO`, unknown scheduler) | All rejected, exit code 1 |
-| 1 coder | Takes one dongle, `burned out` at `time_to_burnout` |
-| 2, 3, 4, 5 coders, fifo and edf, with and without cooldown | End normally when every coder reaches the required compiles |
+| 7 invalid argument sets (no args, too few, negative, unknown scheduler, `time_to_burnout` = 0, `number_of_compiles_required` = 0, decimal) | All rejected, exit code 1 |
+| `1 800 200 200 200 10 0 fifo` | Takes one dongle, `burned out` at 800 ms |
+| `5 2000 200 200 200 10 0 fifo` and `... 7 0 edf` | No burnout; stops by itself when every coder reaches the required compiles |
+| `5 500 200 200 200 10 0 fifo` (infeasible) | `burned out` at 500-501 ms and it is the last line |
+| `5 3000 200 200 200 10 400 fifo` | No burnout; no dongle taken before its 400 ms cooldown elapsed |
 | 200 and 201 coders | End normally; every log line matches the required format |
-| 30 runs of `4 600 100 100 100 4 0` (15 fifo + 15 edf) | No burnout |
-| Forced burnout (`4 200 150 150 150 5 0 fifo`) | `burned out` printed with 0-1 ms of delay |
-| `valgrind --leak-check=full` (fifo, edf with burnout, 1 coder) | 0 errors, no leaks |
-| `valgrind --tool=helgrind` (4 coders, edf) | 0 errors |
+| Block check: 15 runs with 200 coders (7062 compiles) and 30 runs with 5 coders (643 compiles) | 0 lines of another coder between the two `has taken a dongle` and `is compiling` |
+| 30 runs of `8 1500 50 50 50 5 20 edf` | No deadlock (no timeout) |
+| 40 runs of `20 130 60 60 60 50 0 fifo` (forced burnout under contention) | Exactly one `burned out`, always the last line |
+| Burnout latency (`4 200 150 150 150 5 0 fifo`) | `burned out` printed with 0-1 ms of delay |
+| `valgrind --leak-check=full` (5 coders fifo, 4 coders edf with burnout, 1 coder) | 0 errors, no leaks |
+| `valgrind --tool=helgrind` (5 coders edf with cooldown, 4 coders fifo) | 0 errors |
+
+ℹ️ **Known infeasible case:** `5 3000 200 200 200 10 800` burns out at 3000 ms with both schedulers. A dongle is only free again 1000 ms (200 + 800) after a compile starts, and 5 dongles allow at most 2 simultaneous compiles, so only 6 compile starts fit in the first 3000 ms while 7 are needed. It is a limit of the problem, not of the scheduler. With `time_to_burnout = 10000` the same parameters run to completion and fifo and edf grant the dongles in a different order.
 
 ---
 
@@ -200,11 +233,10 @@ The project was compiled and tested with the following checks:
 - Coffman conditions: https://en.wikipedia.org/wiki/Deadlock
 - Earliest deadline first scheduling: https://en.wikipedia.org/wiki/Earliest_deadline_first_scheduling
 - Binary heap / priority queue: https://en.wikipedia.org/wiki/Binary_heap
-- Herlihy & Shavit, *The Art of Multiprocessor Programming*
 
 **🤖 Use of AI**
 
 AI was used as a mentor and reviewer, not as a code generator for the final solution:
 
 - 🧠 Explanation of concepts (mutexes, condition variables, Coffman's conditions, heaps).
-- 🐛 Race condition and deadlock analysis and debugging suggestions.
+- 🐛 Race condition and deadlock analysis.

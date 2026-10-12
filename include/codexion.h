@@ -6,7 +6,7 @@
 /*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/06 13:04:32 by ndias-de          #+#    #+#             */
-/*   Updated: 2026/10/08 20:14:29 by ndias-de         ###   ########.fr       */
+/*   Updated: 2026/10/12 16:10:19 by ndias-de         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -116,5 +116,6 @@ void	convert_time(long timestamp, struct timespec *ts);
 void	print_invalid_args(void);
 void	print_status(t_coder *coder, char *status);
 void	print_burnout(t_coder *coder, char *str);
+void	print_take_and_compile(t_coder *coder, char *status);
 
 #endif

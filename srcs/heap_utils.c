@@ -6,7 +6,7 @@
 /*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/06 17:52:05 by ndias-de          #+#    #+#             */
-/*   Updated: 2026/10/08 18:51:23 by ndias-de         ###   ########.fr       */
+/*   Updated: 2026/10/12 16:34:32 by ndias-de         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -23,11 +23,10 @@ void	heap_destroy(t_heap *heap)
 
 static long	get_sort_key(t_coder *coder, t_scheduler scheduler)
 {
-	if (scheduler == POLICY_FIFO)
-		return (coder->request_order);
-	else if (scheduler == POLICY_EDF)
+	if (scheduler == POLICY_EDF)
 		return (coder->last_compile_start + coder->rules->time_to_burnout);
-	return (0);
+	else
+		return (coder->request_order);
 }
 
 bool	has_priority(t_coder *c1, t_coder *c2, t_scheduler schedule)

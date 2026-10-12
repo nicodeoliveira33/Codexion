@@ -6,11 +6,22 @@
 /*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/06 13:27:46 by ndias-de          #+#    #+#             */
-/*   Updated: 2026/10/08 20:31:01 by ndias-de         ###   ########.fr       */
+/*   Updated: 2026/10/12 16:42:59 by ndias-de         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "codexion.h"
+
+void	print_take_and_compile(t_coder *coder, char *status)
+{
+	long	timestamp;
+
+	if (!is_simulation_stopped(coder->rules))
+	{
+		timestamp = get_time() - coder->rules->start_time;
+		printf("%ld %d %s\n", timestamp, coder->id, status);
+	}
+}
 
 void	print_status(t_coder *coder, char *status)
 {

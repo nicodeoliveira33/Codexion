@@ -6,7 +6,7 @@
 /*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/08 15:53:00 by ndias-de          #+#    #+#             */
-/*   Updated: 2026/10/08 16:42:29 by ndias-de         ###   ########.fr       */
+/*   Updated: 2026/10/12 13:42:16 by ndias-de         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -25,7 +25,9 @@ static void	compile(t_rules *rules, t_coder *coder)
 	pthread_mutex_lock(&coder->mutex);
 	coder->last_compile_start = get_time();
 	pthread_mutex_unlock(&coder->mutex);
-	print_status(coder, "is compiling");
+	print_take_and_compile(coder, "is compiling");
+	pthread_mutex_unlock(&rules->print_mutex);
+	pthread_mutex_unlock(&rules->global_mutex);
 	ft_usleep(rules->time_to_compile, rules);
 	pthread_mutex_lock(&coder->mutex);
 	coder->compiles_done++;

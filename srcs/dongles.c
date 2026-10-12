@@ -6,7 +6,7 @@
 /*   By: ndias-de <ndias-de@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/08 15:38:36 by ndias-de          #+#    #+#             */
-/*   Updated: 2026/10/08 20:10:58 by ndias-de         ###   ########.fr       */
+/*   Updated: 2026/10/12 16:12:55 by ndias-de         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -66,7 +66,8 @@ int	take_dongles(t_rules *rules, t_coder *coder)
 {
 	pthread_mutex_lock(&rules->global_mutex);
 	coder->request_order = ++rules->request_counter;
-	heap_insert(rules->wait_queue, coder, rules->scheduler);
+	if (heap_insert(rules->wait_queue, coder, rules->scheduler) != 0)
+		return (pthread_mutex_unlock(&rules->global_mutex), 1);
 	while (!is_available(rules, coder) && !is_simulation_stopped(rules))
 		cond_selector(rules, coder);
 	if (is_simulation_stopped(rules))
@@ -74,9 +75,9 @@ int	take_dongles(t_rules *rules, t_coder *coder)
 	heap_remove(rules->wait_queue, coder, rules->scheduler);
 	coder->left_dongle->taken = true;
 	coder->right_dongle->taken = true;
-	print_status(coder, "has taken a dongle");
-	print_status(coder, "has taken a dongle");
-	pthread_mutex_unlock(&rules->global_mutex);
+	pthread_mutex_lock(&rules->print_mutex);
+	print_take_and_compile(coder, "has taken a dongle");
+	print_take_and_compile(coder, "has taken a dongle");
 	return (0);
 }
 
