@@ -1,6 +1,6 @@
 NAME = codexion
 CC = cc
-CFLAGS = -Wall -Wextra -Werror -pthread -Iincludes
+CFLAGS = -Wall -Wextra -Werror -pthread -Iinclude
 RM = rm -f
 SRCS_DIR = srcs
 
@@ -12,7 +12,7 @@ SRCS = $(SRCS_DIR)/main.c \
 		$(SRCS_DIR)/dongles_utils.c \
 		$(SRCS_DIR)/heap.c \
 		$(SRCS_DIR)/heap_utils.c \
-		$(SRCS_DIR)/init.c \
+		$(SRCS_DIR)/init_sim.c \
 		$(SRCS_DIR)/monitor.c \
 		$(SRCS_DIR)/print_utils.c \
 		$(SRCS_DIR)/routine.c \
@@ -25,7 +25,7 @@ all: $(NAME)
 $(NAME): $(OBJS)
 	@echo "⚙️  $(NAME) compiling..."
 	@$(CC) $(CFLAGS) $(OBJS) -o $(NAME)
-	@echo "✨ $(NAME) compiled successfully!"
+	@echo "✅ $(NAME) compiled successfully!"
 
 %.o: %.c
 	@$(CC) $(CFLAGS) -c $< -o $@
